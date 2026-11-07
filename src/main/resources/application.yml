@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: ledgerguard
+  datasource:
+    # JDBC form of the Postgres URL, e.g. jdbc:postgresql://host:5432/db?sslmode=require
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/ledgerguard}
+    username: ${DATABASE_USERNAME:}
+    password: ${DATABASE_PASSWORD:}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate   # Flyway owns the schema; Hibernate only checks it matches.
+
+server:
+  port: ${PORT:8080}
+
+ledgerguard:
+  jwt:
+    secret: ${JWT_SECRET:}   # at least 32 characters; the app refuses to start without it
+    issuer: ledgerguard
+    ttl: 1h
+  sandbox:
+    max-deposit: 1000.00
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
