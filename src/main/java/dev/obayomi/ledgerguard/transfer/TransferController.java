@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -33,19 +34,23 @@ public class TransferController {
 	record TransferRequest(@NotNull UUID fromAccountId, @NotNull UUID toAccountId, @NotNull BigDecimal amount,
 			@Size(max = 140) String memo) {}
 
-	public record TransferView(UUID id, TransferType type, UUID fromAccountId, UUID toAccountId,
-			@JsonFormat(shape = JsonFormat.Shape.STRING) BigDecimal amount, String currency,
+	/** {@code fromName} / {@code toName}: the account holders' names, so a recipient can see who paid them. */
+	public record TransferView(UUID id, TransferType type, UUID fromAccountId, String fromName, UUID toAccountId,
+			String toName, @JsonFormat(shape = JsonFormat.Shape.STRING) BigDecimal amount, String currency,
 			TransferStatus status, String failureReason, String memo, Instant createdAt) {
-		static TransferView of(Transfer t) {
-			return new TransferView(t.getId(), t.getType(), t.getFromAccountId(), t.getToAccountId(), t.getAmount(),
-					t.getCurrency(), t.getStatus(), t.getFailureReason(), t.getMemo(), t.getCreatedAt());
+		static TransferView of(Transfer t, Map<UUID, String> names) {
+			return new TransferView(t.getId(), t.getType(), t.getFromAccountId(), names.get(t.getFromAccountId()),
+					t.getToAccountId(), names.get(t.getToAccountId()), t.getAmount(), t.getCurrency(), t.getStatus(),
+					t.getFailureReason(), t.getMemo(), t.getCreatedAt());
 		}
 	}
 
 	private final TransferService transfers;
+	private final PartyNames names;
 
-	TransferController(TransferService transfers) {
+	TransferController(TransferService transfers, PartyNames names) {
 		this.transfers = transfers;
+		this.names = names;
 	}
 
 	@Operation(summary = "Send money between accounts",
@@ -58,23 +63,25 @@ public class TransferController {
 			@Valid @RequestBody TransferRequest req) {
 		TransferService.Result result = transfers.transfer(CurrentUser.from(jwt).id(), idempotencyKey,
 				req.fromAccountId(), req.toAccountId(), req.amount(), req.memo());
-		return respond(result);
+		return respond(result, names);
 	}
 
 	@Operation(summary = "Get one transfer")
 	@GetMapping("/{id}")
 	TransferView get(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-		return TransferView.of(transfers.get(CurrentUser.from(jwt), id));
+		Transfer t = transfers.get(CurrentUser.from(jwt), id);
+		return names.viewer(List.of(t)).apply(t);
 	}
 
 	@Operation(summary = "Recent transfers in or out of my accounts")
 	@GetMapping
 	List<TransferView> recent(@AuthenticationPrincipal Jwt jwt, @RequestParam(defaultValue = "50") int limit) {
-		return transfers.recentFor(CurrentUser.from(jwt).id(), limit).stream().map(TransferView::of).toList();
+		List<Transfer> recent = transfers.recentFor(CurrentUser.from(jwt).id(), limit);
+		return recent.stream().map(names.viewer(recent)).toList();
 	}
 
-	public static ResponseEntity<TransferView> respond(TransferService.Result result) {
-		TransferView body = TransferView.of(result.transfer());
+	public static ResponseEntity<TransferView> respond(TransferService.Result result, PartyNames names) {
+		TransferView body = names.viewer(List.of(result.transfer())).apply(result.transfer());
 		if (result.replayed()) {
 			return ResponseEntity.ok().header("Idempotent-Replayed", "true").body(body);
 		}

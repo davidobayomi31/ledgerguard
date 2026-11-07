@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LedgerGuard</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <!-- ── Sign in / create account ─────────────────────────────── -->
+  <main id="auth-view" class="auth" hidden>
+    <div class="auth-card">
+      <div class="brand"><span class="logo">LG</span> LedgerGuard</div>
+      <p class="muted">A sandbox bank that never loses or double-sends money.</p>
+
+      <button class="btn primary wide demo-btn" id="demo" type="button">Try the demo, no sign-up</button>
+      <p class="muted small center">Creates a private sandbox with sample accounts and transfers.</p>
+      <div class="divider"><span>or use your own account</span></div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab active" data-mode="login" role="tab">Sign in</button>
+        <button class="tab" data-mode="register" role="tab">Create account</button>
+      </div>
+
+      <form id="auth-form" novalidate>
+        <label class="register-only" hidden>Full name
+          <input name="fullName" autocomplete="name" maxlength="100">
+        </label>
+        <label>Email
+          <input name="email" type="email" autocomplete="email" required>
+        </label>
+        <label>Password
+          <input name="password" type="password" autocomplete="current-password" required>
+          <small class="register-only muted" hidden>12 to 72 characters.</small>
+        </label>
+        <p class="form-error" id="auth-error" role="alert"></p>
+        <button class="btn primary wide" type="submit" id="auth-submit">Sign in</button>
+      </form>
+    </div>
+  </main>
+
+  <!-- ── Dashboard ────────────────────────────────────────────── -->
+  <div id="app-view" hidden>
+    <header class="topbar">
+      <div class="brand"><span class="logo">LG</span> LedgerGuard</div>
+      <div class="user">
+        <span id="user-name"></span>
+        <button class="btn ghost small" id="sign-out">Sign out</button>
+      </div>
+    </header>
+
+    <main class="page">
+      <section class="hero customer-only">
+        <div>
+          <p class="muted">Total balance</p>
+          <p class="total" id="total-balance">$0.00</p>
+        </div>
+        <div class="hero-actions">
+          <button class="btn primary" data-open="send">Send money</button>
+          <button class="btn" data-open="deposit">Add test money</button>
+          <button class="btn" data-open="open">Open account</button>
+        </div>
+      </section>
+
+      <div id="notice" class="notice" hidden></div>
+
+      <section id="people-panel" class="panel" hidden>
+        <h2>People in this sandbox <span class="muted small" id="people-count"></span></h2>
+        <p class="muted small">Each person is a real login in the API. Add up to 7, send money between them, and switch to anyone to see it from their side. Switch to the fraud analyst to review held payments. This sandbox is private: nobody else trying the demo can see it.</p>
+        <ul id="people" class="people"></ul>
+        <form id="add-person" class="add-person" novalidate>
+          <input name="name" maxlength="40" placeholder="Name, e.g. Priya Singh" aria-label="New person's name">
+          <button class="btn" type="submit">Add person</button>
+        </form>
+        <p class="form-error" id="people-error" role="alert"></p>
+      </section>
+
+      <!-- Fraud analyst's view: shown instead of accounts when an ANALYST is signed in. -->
+      <section class="hero analyst-only">
+        <div>
+          <p class="muted">Fraud review</p>
+          <p class="total" id="held-count">0 waiting</p>
+        </div>
+        <p class="muted small hero-note">Payments the fraud rules flagged. Nothing has moved yet: approve to release the money, or block to stop it. Every decision is recorded in the audit log.</p>
+      </section>
+
+      <section class="analyst-only">
+        <h2>Review queue</h2>
+        <div id="review-queue" class="reviews"></div>
+      </section>
+
+      <section class="panel analyst-only">
+        <h2>Audit log</h2>
+        <p class="muted small">Append-only: the database refuses edits and deletes, so no decision can be quietly rewritten.</p>
+        <ul id="audit-log" class="list"></ul>
+      </section>
+
+      <section class="customer-only">
+        <h2>Accounts</h2>
+        <div id="accounts" class="accounts"></div>
+      </section>
+
+      <div class="columns customer-only">
+        <section class="panel">
+          <h2>Recent activity</h2>
+          <ul id="activity" class="list"></ul>
+        </section>
+        <section class="panel">
+          <h2 id="statement-title">Statement</h2>
+          <p class="muted small" id="statement-hint">Pick an account above to see its ledger entries.</p>
+          <ul id="statement" class="list"></ul>
+        </section>
+      </div>
+
+      <details class="explainer">
+        <summary>How LedgerGuard keeps money correct</summary>
+        <ul>
+          <li><b>Double-entry ledger.</b> Every transfer writes a debit and a matching credit. Balances are the sum of those entries, never a number someone can edit.</li>
+          <li><b>Safe retries.</b> Each payment carries a unique key. Sending the same request again returns the original result instead of charging twice. Try "Retry this exact request" after a transfer.</li>
+          <li><b>No overdrafts.</b> Accounts are locked while a transfer runs, so two payments can't spend the same money at the same time.</li>
+          <li><b>Fraud review.</b> Each payment to another person is scored by rules (large amount, first payment to someone new, many payments in minutes, emptying the account). One signal alone is normal; two or more hold the payment for a fraud analyst, and no money moves until they approve.</li>
+        </ul>
+      </details>
+    </main>
+  </div>
+
+  <!-- ── Dialogs ──────────────────────────────────────────────── -->
+  <dialog id="dlg-open">
+    <form method="dialog" class="dialog" data-action="open">
+      <h3>Open an account</h3>
+      <label>Account name
+        <input name="name" required maxlength="60" placeholder="e.g. Chequing">
+      </label>
+      <p class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="ok">Open account</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-deposit">
+    <form method="dialog" class="dialog" data-action="deposit">
+      <h3>Add test money</h3>
+      <p class="muted small">Sandbox only: simulates money arriving from outside. Up to $1,000.00 per deposit.</p>
+      <label>Into account
+        <select name="accountId" required></select>
+      </label>
+      <label>Amount (CAD)
+        <input name="amount" inputmode="decimal" required placeholder="500.00">
+      </label>
+      <p class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="ok">Add money</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-send">
+    <form method="dialog" class="dialog" data-action="send">
+      <h3>Send money</h3>
+      <label>From
+        <select name="fromAccountId" required></select>
+      </label>
+      <label>To
+        <select name="toChoice" required></select>
+      </label>
+      <label class="other-account" hidden>Their account ID
+        <input name="toOther" placeholder="Paste the account ID they gave you">
+      </label>
+      <label>Amount (CAD)
+        <input name="amount" inputmode="decimal" required placeholder="120.50">
+      </label>
+      <label>Note (optional)
+        <input name="memo" maxlength="140" placeholder="Rent, dinner…">
+      </label>
+      <p class="form-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" value="ok">Send</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

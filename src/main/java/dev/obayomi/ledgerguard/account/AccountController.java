@@ -8,6 +8,7 @@ import java.util.UUID;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import dev.obayomi.ledgerguard.common.CurrentUser;
 import dev.obayomi.ledgerguard.ledger.LedgerEntry;
+import dev.obayomi.ledgerguard.transfer.PartyNames;
 import dev.obayomi.ledgerguard.transfer.TransferController;
 import dev.obayomi.ledgerguard.transfer.TransferService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -58,10 +59,12 @@ class AccountController {
 
 	private final AccountService accounts;
 	private final TransferService transfers;
+	private final PartyNames names;
 
-	AccountController(AccountService accounts, TransferService transfers) {
+	AccountController(AccountService accounts, TransferService transfers, PartyNames names) {
 		this.accounts = accounts;
 		this.transfers = transfers;
+		this.names = names;
 	}
 
 	@Operation(summary = "Open a new CAD account")
@@ -97,6 +100,6 @@ class AccountController {
 	ResponseEntity<TransferController.TransferView> deposit(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id,
 			@RequestHeader("Idempotency-Key") String idempotencyKey, @Valid @RequestBody DepositRequest req) {
 		TransferService.Result result = transfers.deposit(CurrentUser.from(jwt).id(), idempotencyKey, id, req.amount());
-		return TransferController.respond(result);
+		return TransferController.respond(result, names);
 	}
 }

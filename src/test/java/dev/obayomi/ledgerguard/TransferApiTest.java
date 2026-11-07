@@ -1,5 +1,6 @@
 package dev.obayomi.ledgerguard;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -32,6 +33,88 @@ class TransferApiTest extends IntegrationTest {
 		// The statement shows the debit as a negative ledger entry.
 		ApiClient.Response statement = api.get("/api/accounts/" + a + "/entries", alice);
 		assertThat(statement.json().get("totalItems")).isEqualTo(2);
+	}
+
+	@Test
+	void bothSidesSeeWhoTheMoneyCameFromAndWentTo() {
+		ApiClient api = api();
+		String alice = api.newCustomerToken("Alice Martin");
+		String bob = api.newCustomerToken("Bob Osei");
+		String a = api.openAccount(alice);
+		String b = api.openAccount(bob);
+		api.deposit(alice, a, "50.00");
+		api.transfer(alice, UUID.randomUUID().toString(), a, b, "20.00");
+
+		// Bob, the recipient, sees who paid him.
+		Map<String, Object> received = api.get("/api/transfers", bob).list().get(0);
+		assertThat(received.get("fromName")).isEqualTo("Alice Martin");
+		assertThat(received.get("toName")).isEqualTo("Bob Osei");
+
+		// Alice's sandbox deposit shows the platform as the sender, not a person.
+		Map<String, Object> deposit = api.get("/api/transfers", alice).list().get(1);
+		assertThat(deposit.get("type")).isEqualTo("DEPOSIT");
+		assertThat(deposit.get("fromName")).isEqualTo("LedgerGuard sandbox");
+	}
+
+	@Test
+	void retryingADepositWithTheSameKeyAddsTheMoneyOnce() {
+		ApiClient api = api();
+		String alice = api.newCustomerToken();
+		String a = api.openAccount(alice);
+		String key = UUID.randomUUID().toString();
+		String path = "/api/accounts/" + a + "/deposits";
+
+		ApiClient.Response first = api.post(path, alice, key, Map.of("amount", "100.00"));
+		ApiClient.Response retry = api.post(path, alice, key, Map.of("amount", "100.00"));
+
+		assertThat(first.status()).isEqualTo(201);
+		assertThat(retry.status()).isEqualTo(200);
+		assertThat(retry.headers().getFirst("Idempotent-Replayed")).isEqualTo("true");
+		assertThat(retry.get("id")).isEqualTo(first.get("id"));
+		assertThat(api.balance(alice, a)).isEqualByComparingTo("100.00");
+	}
+
+	@Test
+	void onlyThePeopleInvolvedCanSeeATransfer() {
+		ApiClient api = api();
+		String alice = api.newCustomerToken();
+		String bob = api.newCustomerToken();
+		String mallory = api.newCustomerToken();
+		String a = api.openAccount(alice);
+		String b = api.openAccount(bob);
+		api.deposit(alice, a, "50.00");
+		String id = api.transfer(alice, UUID.randomUUID().toString(), a, b, "20.00").get("id");
+
+		assertThat(api.get("/api/transfers/" + id, alice).status()).isEqualTo(200); // sender
+		assertThat(api.get("/api/transfers/" + id, bob).status()).isEqualTo(200); // recipient
+		// Anyone else gets 404, not 403, so guessing ids can't even confirm a transfer exists.
+		ApiClient.Response snoop = api.get("/api/transfers/" + id, mallory);
+		assertThat(snoop.status()).isEqualTo(404);
+		assertThat(snoop.get("code")).isEqualTo("TRANSFER_NOT_FOUND");
+		assertThat(api.get("/api/transfers/" + UUID.randomUUID(), mallory).status()).isEqualTo(404);
+	}
+
+	@Test
+	void theStatementPagesThroughEntriesNewestFirst() {
+		ApiClient api = api();
+		String alice = api.newCustomerToken();
+		String a = api.openAccount(alice);
+		api.deposit(alice, a, "10.00");
+		api.deposit(alice, a, "20.00");
+		api.deposit(alice, a, "30.00");
+		String path = "/api/accounts/" + a + "/entries?size=2&page=";
+
+		Map<String, Object> page0 = api.get(path + 0, alice).json();
+		Map<String, Object> page1 = api.get(path + 1, alice).json();
+
+		assertThat(page0.get("totalItems")).isEqualTo(3);
+		assertThat(amounts(page0)).containsExactly("30.00", "20.00");
+		assertThat(amounts(page1)).containsExactly("10.00");
+		assertThat(amounts(api.get(path + 2, alice).json())).isEmpty();
+	}
+
+	private static List<Object> amounts(Map<String, Object> page) {
+		return ((List<?>) page.get("items")).stream().map(e -> ((Map<?, ?>) e).get("amount")).map(Object.class::cast).toList();
 	}
 
 	@Test
