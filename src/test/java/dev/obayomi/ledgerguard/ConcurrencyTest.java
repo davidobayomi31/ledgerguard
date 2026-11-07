@@ -2,6 +2,7 @@ package dev.obayomi.ledgerguard;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -79,6 +80,33 @@ class ConcurrencyTest extends IntegrationTest {
 		assertThat(results).extracting(r -> r.get("status")).containsOnly("SETTLED");
 		assertThat(api.balance(alice, a)).isEqualByComparingTo("100.00");
 		assertThat(api.balance(bob, b)).isEqualByComparingTo("100.00");
+	}
+
+	@Test
+	void analystsApprovingTheSameHeldPaymentAtOnceMoveTheMoneyOnlyOnce() throws Exception {
+		ApiClient api = api();
+		// $500 to someone new is held (large + new payee). Alice has enough to cover it twice,
+		// so without the row lock on the transfer, a double approval would visibly move $1,000.
+		for (int round = 1; round <= 3; round++) {
+			String alice = api.newCustomerToken();
+			String bob = api.newCustomerToken();
+			String a = api.openAccount(alice);
+			String b = api.openAccount(bob);
+			api.deposit(alice, a, "1000.00");
+			api.deposit(alice, a, "1000.00");
+			String held = api.transfer(alice, UUID.randomUUID().toString(), a, b, "500.00").get("id");
+			List<String> analysts = new ArrayList<>();
+			for (int i = 0; i < 10; i++) analysts.add(api.newAnalystToken());
+
+			List<ApiClient.Response> results = runAtOnce(10,
+					i -> api.post("/api/reviews/" + held + "/approve", analysts.get(i), null, Map.of()));
+
+			assertThat(results).filteredOn(r -> r.status() == 200).as("round %d", round).hasSize(1);
+			assertThat(results).filteredOn(r -> r.status() == 409).as("round %d", round).hasSize(9);
+			assertThat(api.balance(alice, a)).as("round %d", round).isEqualByComparingTo("1500.00");
+			assertThat(api.balance(bob, b)).as("round %d", round).isEqualByComparingTo("500.00");
+			assertThat(api.get("/api/transfers/" + held, alice).get("status")).isEqualTo("SETTLED");
+		}
 	}
 
 	interface Call {

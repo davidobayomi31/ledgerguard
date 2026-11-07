@@ -26,8 +26,9 @@ class AuthController {
 
 	record RegisterRequest(
 			@NotBlank @Email @Size(max = 254) String email,
-			@NotBlank @Size(min = 12, max = 128) String password,
-			@NotBlank @Size(max = 100) String fullName) {}
+			@NotBlank @Size(min = 12, max = 72) String password, // 72 = BCrypt's limit (AuthService also checks bytes)
+			@NotBlank @Size(max = 100) String fullName,
+			UUID sandboxId) {} // optional: groups demo users into one private sandbox
 
 	record LoginRequest(@NotBlank String email, @NotBlank String password) {}
 
@@ -52,7 +53,7 @@ class AuthController {
 	@PostMapping("/register")
 	@ResponseStatus(HttpStatus.CREATED)
 	AuthResponse register(@Valid @RequestBody RegisterRequest req) {
-		return respond(auth.register(req.email(), req.password(), req.fullName()));
+		return respond(auth.register(req.email(), req.password(), req.fullName(), req.sandboxId()));
 	}
 
 	@Operation(summary = "Log in and get an access token")
@@ -68,7 +69,7 @@ class AuthController {
 		return UserView.of(auth.get(CurrentUser.from(jwt).id()));
 	}
 
-	private AuthResponse respond(User user) {
+	AuthResponse respond(User user) {
 		TokenService.IssuedToken token = tokens.issue(user);
 		return new AuthResponse(token.value(), "Bearer", token.expiresAt(), UserView.of(user));
 	}

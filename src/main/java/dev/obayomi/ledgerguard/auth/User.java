@@ -36,6 +36,10 @@ public class User {
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
+	/** Set for demo users only: everyone from one "Try the demo" click shares it. See V3__sandbox_scope.sql. */
+	@Column(name = "sandbox_id", updatable = false)
+	private UUID sandboxId;
+
 	protected User() {}
 
 	public User(String email, String passwordHash, String fullName, Role role) {
@@ -46,10 +50,16 @@ public class User {
 		this.createdAt = Instant.now();
 	}
 
+	public User(String email, String passwordHash, String fullName, Role role, UUID sandboxId) {
+		this(email, passwordHash, fullName, role);
+		this.sandboxId = sandboxId;
+	}
+
 	public UUID getId() { return id; }
 	public String getEmail() { return email; }
 	public String getPasswordHash() { return passwordHash; }
 	public String getFullName() { return fullName; }
 	public Role getRole() { return role; }
 	public Instant getCreatedAt() { return createdAt; }
+	public UUID getSandboxId() { return sandboxId; }
 }

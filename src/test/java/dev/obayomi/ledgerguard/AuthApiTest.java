@@ -63,6 +63,28 @@ class AuthApiTest extends IntegrationTest {
 	}
 
 	@Test
+	void passwordsLongerThanBcryptAllowsAreRejectedClearly() {
+		// 100 plain characters: caught by request validation.
+		ApiClient.Response tooManyChars = api().post("/api/auth/register", null, null,
+				Map.of("email", "long-" + UUID.randomUUID() + "@example.com", "password", "x".repeat(100), "fullName", "L"));
+		assertThat(tooManyChars.status()).isEqualTo(400);
+
+		// 40 accented letters = 40 characters but 80 bytes: passes the length check, caught by the byte check.
+		ApiClient.Response tooManyBytes = api().post("/api/auth/register", null, null,
+				Map.of("email", "bytes-" + UUID.randomUUID() + "@example.com", "password", "é".repeat(40), "fullName", "B"));
+		assertThat(tooManyBytes.status()).isEqualTo(400);
+		assertThat(tooManyBytes.get("code")).isEqualTo("PASSWORD_TOO_LONG");
+	}
+
+	@Test
+	void anOverlongPasswordAtLoginIsJustAWrongPassword() {
+		ApiClient.Response r = api().post("/api/auth/login", null, null,
+				Map.of("email", "anyone@example.com", "password", "y".repeat(200)));
+		assertThat(r.status()).isEqualTo(401);
+		assertThat(r.get("code")).isEqualTo("INVALID_CREDENTIALS");
+	}
+
+	@Test
 	void shortPasswordsFailValidation() {
 		ApiClient.Response r = api().post("/api/auth/register", null, null,
 				Map.of("email", "short-" + UUID.randomUUID() + "@example.com", "password", "short", "fullName", "S"));

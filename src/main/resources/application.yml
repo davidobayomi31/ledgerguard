@@ -21,6 +21,8 @@ ledgerguard:
     ttl: 1h
   sandbox:
     max-deposit: 1000.00
+    # Lets the public demo create fraud-analyst logins. Set SANDBOX_ANALYST_SIGNUP=false in a real deployment.
+    analyst-signup: ${SANDBOX_ANALYST_SIGNUP:true}
 
 management:
   endpoints:

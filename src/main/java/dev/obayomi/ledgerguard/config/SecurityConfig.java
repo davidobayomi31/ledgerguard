@@ -34,8 +34,14 @@ public class SecurityConfig {
 		http.csrf(csrf -> csrf.disable()) // no cookies, so no CSRF risk
 			.sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests(auth -> auth
-				.requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
+				.requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login", "/api/sandbox/analysts").permitAll()
+				// Fraud review: analysts and admins only. Customers get 403.
+				.requestMatchers("/api/reviews/**").hasAnyRole("ANALYST", "ADMIN")
 				.requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+				// Spring forwards unhandled errors to /error. Without this, a 400 or 500 reaches the client as a misleading 401.
+				.requestMatchers("/error").permitAll()
+				// The web app's own files. They hold no data; every API call they make still needs a token.
+				.requestMatchers(HttpMethod.GET, "/", "/index.html", "/app.js", "/app.css", "/favicon.ico").permitAll()
 				.anyRequest().authenticated())
 			.oauth2ResourceServer(o -> o.jwt(jwt -> jwt.jwtAuthenticationConverter(roleConverter())));
 		return http.build();

@@ -59,10 +59,35 @@ public final class ApiClient {
 	// ---- helpers for common setup ----
 
 	public String newCustomerToken() {
+		return newCustomerToken("Test User");
+	}
+
+	public String newCustomerToken(String fullName) {
+		return newCustomerToken(fullName, null);
+	}
+
+	/** A customer in a demo sandbox (null = an ordinary customer). */
+	public String newCustomerToken(String fullName, UUID sandboxId) {
 		String email = "user-" + UUID.randomUUID() + "@example.com";
-		Response r = post("/api/auth/register", null, null,
-				Map.of("email", email, "password", "correct-horse-battery", "fullName", "Test User"));
+		Map<String, Object> body = new java.util.HashMap<>(
+				Map.of("email", email, "password", "correct-horse-battery", "fullName", fullName));
+		if (sandboxId != null) body.put("sandboxId", sandboxId.toString());
+		Response r = post("/api/auth/register", null, null, body);
 		if (r.status() != 201) throw new IllegalStateException("register failed: " + r);
+		return r.get("accessToken");
+	}
+
+	/** A fraud analyst, created through the sandbox endpoint. */
+	public String newAnalystToken() {
+		return newAnalystToken(null);
+	}
+
+	/** An analyst scoped to one demo sandbox (null = sees every payment). */
+	public String newAnalystToken(UUID sandboxId) {
+		Map<String, Object> body = new java.util.HashMap<>(Map.of("fullName", "Sam Rivera"));
+		if (sandboxId != null) body.put("sandboxId", sandboxId.toString());
+		Response r = post("/api/sandbox/analysts", null, null, body);
+		if (r.status() != 201) throw new IllegalStateException("analyst signup failed: " + r);
 		return r.get("accessToken");
 	}
 

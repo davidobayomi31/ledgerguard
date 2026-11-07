@@ -55,6 +55,21 @@ public class Transfer {
 
 	private String memo;
 
+	@Column(name = "risk_score", nullable = false)
+	private int riskScore;
+
+	@Column(name = "risk_signals", nullable = false)
+	private String riskSignals = "";
+
+	@Column(name = "reviewed_by")
+	private UUID reviewedBy;
+
+	@Column(name = "reviewed_at")
+	private Instant reviewedAt;
+
+	@Column(name = "review_note")
+	private String reviewNote;
+
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
@@ -83,6 +98,26 @@ public class Transfer {
 		this.failureReason = reason;
 	}
 
+	void recordRisk(int score, String signalCodes) {
+		this.riskScore = score;
+		this.riskSignals = signalCodes;
+	}
+
+	void hold() {
+		this.status = TransferStatus.HELD;
+	}
+
+	void block() {
+		this.status = TransferStatus.BLOCKED;
+		this.failureReason = "BLOCKED_BY_REVIEW";
+	}
+
+	void markReviewed(UUID analystId, String note) {
+		this.reviewedBy = analystId;
+		this.reviewedAt = Instant.now();
+		this.reviewNote = note;
+	}
+
 	public UUID getId() { return id; }
 	public UUID getInitiatedBy() { return initiatedBy; }
 	public String getIdempotencyKey() { return idempotencyKey; }
@@ -96,4 +131,9 @@ public class Transfer {
 	public String getFailureReason() { return failureReason; }
 	public String getMemo() { return memo; }
 	public Instant getCreatedAt() { return createdAt; }
+	public int getRiskScore() { return riskScore; }
+	public String getRiskSignals() { return riskSignals; }
+	public UUID getReviewedBy() { return reviewedBy; }
+	public Instant getReviewedAt() { return reviewedAt; }
+	public String getReviewNote() { return reviewNote; }
 }
